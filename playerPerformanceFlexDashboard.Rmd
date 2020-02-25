@@ -1,0 +1,107 @@
+---
+title: "Player Performance"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(shiny)
+library(shinydashboard)
+library(shinythemes)
+library(readxl)
+library(tidyverse)
+library(scales)
+library(RColorBrewer)
+
+# helper functions
+source("datacleaning.R")
+
+# load global variables for formatting
+# The palette with grey:
+cbp1 <- c("#999999", "#E69F00", "#56B4E9", "#009E73",
+          "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+
+# load data for fall season
+bball_df <- read_excel("data/Basketball 2019.xlsx", sheet = "Team Stats")
+
+```
+
+Column{.sidebar}
+----------------------------------------------------------------------
+```{r}
+selectInput("season_id", label = "Select Game",
+            choices = c("Fall 2019", 'Winter 2020'), selected='Fall 2019')
+
+selectInput("game_id", label = "Select Game",
+            choices = unique(bball_df$Game))
+
+# sliderInput("bw_adjust", label = "Bandwidth adjustment:",
+#             min = 0.2, max = 2, value = 1, step = 0.2)
+```
+
+
+
+
+Column <!--  {data-width=650} -->
+-----------------------------------------------------------------------
+
+### Box Stats by Player
+
+```{r}
+game_box_stats <- bball_df %>%
+  group_by(Game,Player) %>%
+  summarise(Total_Points = sum(Points),
+            Total_Assists = sum(Assists),
+            Total_Rebounds = sum(Rebounds),
+            Total_Steals = sum(Steals),
+            Total_Blocks = sum(Blocks),
+            # Total_Turnovers = sum(Turnovers)
+  ) 
+
+renderPlot({
+  game_num <- as.numeric(input$game_id)
+dodge_text <- position_dodge(width=.75)
+game_box_stats %>%
+  filter(Game == game_num) %>%
+  pivot_longer(cols = names(game_box_stats)[-c(1,2)],
+             names_to='Skill') %>%
+  ggplot(aes(x = Player, y = value, fill = Skill)) + 
+  geom_col(aes(fill=Skill), position = dodge_text) + 
+  geom_text(aes(y=value+1,label=ifelse(value>0,value,"")), position = dodge_text) + 
+  scale_y_continuous(breaks= pretty_breaks()) + 
+  scale_fill_brewer(palette="Dark2")+
+  labs(title="Box Stats by Player") 
+})
+
+```
+
+
+### Shooting by Player
+
+```{r}
+
+renderPlot({
+  game_num <- as.numeric(input$game_id)
+  # using my function
+  all_shots <- bball_df %>% 
+    filter(Game == game_num) %>%
+    make_shooting_data()
+  
+  ggplot(all_shots, aes(x=Player, fill = factor(Result, level= c("Missed", "Made")))) + 
+    geom_bar() +
+    facet_wrap(~Shot_Type) +
+    scale_y_continuous(breaks = pretty_breaks()) + 
+    labs(fill = "Result", title="Shooting Accuracy by Player", y = 'Shot Count') +
+    geom_text(stat='count',
+              position = position_stack(vjust = 0.5),
+              aes(label=..count..)) + 
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust=0.5))
+
+})
+```
+
